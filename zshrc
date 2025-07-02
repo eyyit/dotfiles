@@ -85,13 +85,13 @@ zstyle ':completion:*' menu select
 setopt completealiases
 
 function git_precmd {
+  local blink='%{[5m%}'
+  local reset='%{[0m%}'
   # check for untracked files or updated submodules, since vcs_info doesn't
-  local FMT_BRANCH="${FMT_PREFIX}%{$c_branch%}%b%u%c${FMT_SUFFIX}"
+  local FMT_BRANCH="${FMT_PREFIX}%{$c_branch%}%b%u%c${reset}${FMT_SUFFIX}"
   if [[ -n "$(git status --porcelain 2>/dev/null | grep '^?? ')" ]]; then
-    local blink='%{[5m%}'
-    local reset='%{[0m%}'
     local BLINK_PART="%{$red%}${blink} ⚠️ ${reset}"
-    FMT_BRANCH="${FMT_PREFIX}%{$c_branch%}%b${BLINK_PART}%u%c${FMT_SUFFIX}"
+    FMT_BRANCH="${FMT_PREFIX}%{$c_branch%}%b${BLINK_PART}%u%c${reset}${FMT_SUFFIX}"
   fi
   zstyle ':vcs_info:*:prompt:*' formats "${FMT_BRANCH}"
   vcs_info 'prompt'
