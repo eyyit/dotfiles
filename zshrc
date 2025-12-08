@@ -71,7 +71,7 @@ zstyle ':vcs_info:*:prompt:*' check-for-changes true
 local FMT_PREFIX="%{$c_presuf%}["
 local FMT_SUFFIX="%{$c_presuf%}]"
 local FMT_BRANCH="(%{$c_branch%}%b%u%c)"
-local FMT_ACTION="(%{$red%}%a)"
+local FMT_ACTION="%{$red%}(%a)%f%k%%b"
 local FMT_UNSTAGED="%{$yellow%} ●"
 local FMT_STAGED="%{$green%} ●"
 
