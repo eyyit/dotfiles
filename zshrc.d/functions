@@ -1,6 +1,6 @@
 #!/bin/bash
 function dc {
-  conf="${HOME}/docker/docker-compose.yml"
+  conf="/opt/repos/docker/docker-compose.yml"
   test -r ./docker-compose.yml && conf='./docker-compose.yml'
   docker compose -f "${conf}" "$@"
 }
