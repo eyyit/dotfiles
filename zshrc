@@ -150,7 +150,7 @@ local p_prompt="%{$c_prompt%}%#%f"
 PROMPT='${p_return}${p_docker}${p_time} ${p_user}${p_host} ${p_pwd} $vcs_info_msg_0_
 ${p_prompt} '
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" &> /dev/null && pwd)
+SCRIPT_DIR=${${(%):-%x}:A:h}
 for entry in ${SCRIPT_DIR}/zshrc.d/* \
              ${HOME}/.zsh.local; do
   test -r ${entry} && source ${entry} || :
