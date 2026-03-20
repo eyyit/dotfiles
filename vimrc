@@ -20,11 +20,6 @@ set rtp+=~/.vim_plugins/powerline/powerline/bindings/vim
 if !exists('MyFuncLoad')
   let MyFuncLoad = 1
 
-  " Customize the status line
-  function! SetStatusLineStyle()
-    let &stl='%F%m%r%h%w\ [%{&ff}]\ [%Y]\ %P\ %=[a=\%03.3b]\ [h=\%02.2B]\ [%l,%v]'
-  endfunc
-
   " Paste Mode
   function! TogglePasteMode()
     set number!
@@ -110,9 +105,6 @@ endif
 set backupdir=~/.vim/state
 set directory=~/.vim/state
 
-" Statusline
-if has('statusline') | call SetStatusLineStyle() | endif
-
 " Syntastic
 let g:syntastic_python_pylint_args = '--rcfile=~/.pylintrc'
 let g:syntastic_python_checkers = ['python']
@@ -120,6 +112,8 @@ let g:syntastic_python_python_exec = 'python3'
 nmap <LocalLeader>s :SyntasticCheck<CR>
 
 " Visual Tweaks
+set ambiwidth=single
+set t_ut= " Disable Background Color Erase to fix terminal rendering glitches
 set t_Co=256
 set background=dark
 let g:solarized_termcolors = 256
