@@ -3,24 +3,40 @@ DATA="${XDG_RUNTIME_DIR:-/tmp}/tmux.${UID}.data"
 test -f "${DATA}" || touch "${DATA}"
 
 WIDTH="${1:-100}"
+SESSION="${2:-0}"
 
-# Sizing tiers based on client width:
-# >= 120: Network (no decimals), 3 load values, full clock
-# 100-119: Network (no decimals), 1 load value, compact clock
-# 85-99:   Remove clock (<), network (no decimals), 1 load value
-# 70-84:   Remove network (<), remove clock (<), 1 load value
-# < 70:    Remove load (<), remove network (<), remove clock (<)
+STATUS_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+LEFT_FILE="${STATUS_DIR}/tmux.${UID}.${SESSION}.left_len"
+RIGHT_FILE="${STATUS_DIR}/tmux.${UID}.${SESSION}.right_len"
 
-if (( WIDTH < 70 )); then
-  NET_MODE="min"; LOAD_MODE="min"; TIME_MODE="min"
-elif (( WIDTH < 85 )); then
-  NET_MODE="min"; LOAD_MODE="short"; TIME_MODE="min"
-elif (( WIDTH < 100 )); then
-  NET_MODE="full"; LOAD_MODE="short"; TIME_MODE="min"
-elif (( WIDTH < 120 )); then
-  NET_MODE="full"; LOAD_MODE="short"; TIME_MODE="short"
-else
+declare -i left_len=20
+if [[ -f "${LEFT_FILE}" ]]; then
+  read -r left_len < "${LEFT_FILE}" 2>/dev/null || left_len=20
+fi
+
+# Dynamic remaining width available for right statusline:
+declare -i avail_w=$(( WIDTH - left_len - 1 ))
+
+# Sizing tiers based on dynamically available width:
+# >= 38: Network, 3 load values, full clock
+# 34-37: Network, 3 load values, compact clock
+# 28-33: Network, 1 load value,  compact clock
+# 20-27: Network, 1 load value,  minimized clock (<)
+# 12-19: Min network (<), 1 load value, minimized clock (<)
+# < 12:  All widgets minimized (<)
+
+if (( avail_w >= 38 )); then
   NET_MODE="full"; LOAD_MODE="full"; TIME_MODE="full"
+elif (( avail_w >= 34 )); then
+  NET_MODE="full"; LOAD_MODE="full"; TIME_MODE="short"
+elif (( avail_w >= 28 )); then
+  NET_MODE="full"; LOAD_MODE="short"; TIME_MODE="short"
+elif (( avail_w >= 20 )); then
+  NET_MODE="full"; LOAD_MODE="short"; TIME_MODE="min"
+elif (( avail_w >= 12 )); then
+  NET_MODE="min"; LOAD_MODE="short"; TIME_MODE="min"
+else
+  NET_MODE="min"; LOAD_MODE="min"; TIME_MODE="min"
 fi
 
 # Use Bash's clock and formatter to avoid forking date.
@@ -54,6 +70,7 @@ fmt_rate() {
 }
 
 PREV_BG="colour0"
+declare -i right_len=0
 
 render_tab () {
   local bg="$1" fg="$2" content="$3" pad_right="${4- }"
@@ -65,6 +82,7 @@ render_tab () {
 network_tab () {
   if [[ "${NET_MODE}" == "min" ]]; then
     render_tab "colour27" "colour255" "<"
+    right_len=$(( right_len + 4 ))
     return
   fi
 
@@ -141,6 +159,7 @@ network_tab () {
     '#[fg=colour249]↓#[fg=colour255]%s #[fg=colour249]↑#[fg=colour255]%s' \
     "${rate_rx}" "${rate_tx}"
   render_tab "colour27" "colour255" "${content}"
+  right_len=$(( right_len + 14 ))
 }
 
 load_tab () {
@@ -168,6 +187,7 @@ load_tab () {
 
   if [[ "${LOAD_MODE}" == "min" ]]; then
     render_tab "${bg}" "${fg}" "<"
+    right_len=$(( right_len + 4 ))
     return
   fi
 
@@ -178,19 +198,23 @@ load_tab () {
     printf -v content "%.0f" "${l1}"
   fi
   render_tab "${bg}" "${fg}" "${content}"
+  right_len=$(( right_len + ${#content} + 3 ))
 }
 
 time_tab () {
   if [[ "${TIME_MODE}" == "min" ]]; then
     render_tab "colour220" "colour0" "<" ""
+    right_len=$(( right_len + 3 ))
     return
   fi
   local content="${time_short}"
   [[ "${TIME_MODE}" == "full" ]] && content="${time_full}"
   render_tab "colour220" "colour0" "${content}" ""
+  right_len=$(( right_len + ${#content} + 2 ))
 }
 
 network_tab
 load_tab
 time_tab
 printf "#[default]"
+printf "%d\n" "${right_len}" > "${RIGHT_FILE}" 2>/dev/null || true
