@@ -2,12 +2,12 @@
 
 alias cp='cp -i'
 alias ctop='docker run --rm -ti --name=ctop -v /var/run/docker.sock:/var/run/docker.sock quay.io/vektorlab/ctop:latest'
-alias diff='git diff --no-index $1 $2'
+alias diff='git diff --no-index'
 alias egrep='egrep --color=auto'
 alias exut='exit'
 alias exot='exit'
 alias fgrep='fgrep --color=auto'
-alias fx='docker run -it --rm -v .:/data:ro antonmedv/fx $1'
+alias fx='docker run -it --rm -v .:/data:ro antonmedv/fx'
 alias grep='grep --color=auto'
 alias less='less -r'
 alias l='ls -CF'
@@ -22,3 +22,5 @@ alias rsyncme='rsync -vaogHDSxP --no-inc-recursive'
 alias sagent="sshagent_init"
 alias fix_title="echo -en '\033k  \033\\'"
 alias vi='vim'
+alias vim-update='vimplug_update'
+alias dotfiles-update='${HOME}/.dotfiles/scripts/update.sh'

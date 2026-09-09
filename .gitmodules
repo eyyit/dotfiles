@@ -1,6 +1,4 @@
 [submodule "scripts/zsh-autosuggestions"]
 	path = scripts/zsh-autosuggestions
 	url = https://github.com/zsh-users/zsh-autosuggestions
-[submodule "vim/bundle/indentLine"]
-	path = vim/bundle/indentLine
-	url = https://github.com/Yggdroot/indentLine
+

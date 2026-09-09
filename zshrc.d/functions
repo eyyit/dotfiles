@@ -141,3 +141,8 @@ function rerun {
     done
   done
 }
+
+function vimplug_update {
+  vim -es -u "${HOME}/.vimrc" -i NONE \
+    -c "PlugUpdate --sync" -c "silent! PlugClean!" -c "qa"
+}

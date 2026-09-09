@@ -1,8 +1,16 @@
 autoload -U colors compinit promptinit select-word-style
 colors
-compinit
 promptinit
 select-word-style whitespace
+
+# Cache compinit dump for 24 hours to skip expensive compaudit
+setopt extendedglob
+local zcompdump="${ZDOTDIR:-$HOME}/.zcompdump"
+if [[ -n "$zcompdump"(#qN.mh+24) ]]; then
+  compinit
+else
+  compinit -C
+fi
 
 autoload -Uz vcs_info
 
@@ -70,7 +78,7 @@ zstyle ':vcs_info:*:prompt:*' check-for-changes true
 # %S - path in the repository
 local FMT_PREFIX="%{$c_presuf%}["
 local FMT_SUFFIX="%{$c_presuf%}]"
-local FMT_BRANCH="(%{$c_branch%}%b%u%c)"
+local FMT_BRANCH="${FMT_PREFIX}%{$c_branch%}%b%u%c%f${FMT_SUFFIX}"
 local FMT_ACTION="%{$red%}(%a)%f%k%%b"
 local FMT_UNSTAGED="%{$yellow%} ●"
 local FMT_STAGED="%{$green%} ●"
@@ -85,20 +93,40 @@ zstyle ':completion:*' menu select
 setopt completealiases
 
 function git_precmd {
-  local blink='%{[5m%}'
-  local reset='%{[0m%}'
-  # check for untracked files or updated submodules, since vcs_info doesn't
-  local FMT_BRANCH="${FMT_PREFIX}%{$c_branch%}%b%u%c${reset}${FMT_SUFFIX}"
-  if [[ -n "$(git status --porcelain 2>/dev/null | grep '^?? ')" ]]; then
-    local BLINK_PART="%{$red%}${blink} ⚠️ ${reset}"
-    FMT_BRANCH="${FMT_PREFIX}%{$c_branch%}%b${BLINK_PART}%u%c${reset}${FMT_SUFFIX}"
+  # Fast ancestor check for .git to avoid crawling outside git repos
+  local dir="$PWD"
+  local is_git=0
+  while [[ -n "$dir" && "$dir" != "/" ]]; do
+    if [[ -e "$dir/.git" ]]; then
+      is_git=1
+      break
+    fi
+    dir="${dir:h}"
+  done
+  [[ -e "/.git" ]] && is_git=1
+
+  if (( ! is_git )); then
+    vcs_info_msg_0_=""
+    return
+  fi
+
+  # check for untracked or added files, since vcs_info doesn't
+  local FMT_BRANCH="${FMT_PREFIX}%{$c_branch%}%b%u%c%f${FMT_SUFFIX}"
+  if [[ -n "$(git status --porcelain=v1 -unormal --no-optional-locks \
+              2>/dev/null | grep -E '^\?\?|^A')" ]]; then
+    local blink=$'%{\e[5m%}'
+    local noblink=$'%{\e[25m%}'
+    local BLINK_PART="${blink}%{$red%} ⚠️ %f${noblink}"
+    FMT_BRANCH="${FMT_PREFIX}%{$c_branch%}%b${BLINK_PART}%u%c%f${FMT_SUFFIX}"
   fi
   zstyle ':vcs_info:*:prompt:*' formats "${FMT_BRANCH}"
+  zstyle ':vcs_info:*:prompt:*' actionformats "${FMT_BRANCH}${FMT_ACTION}"
   vcs_info 'prompt'
 }
 add-zsh-hook precmd git_precmd
 
-setopt appendhistory autocd interactivecomments nomatch prompt_subst
+setopt inc_append_history_time autocd interactivecomments nomatch prompt_subst
+setopt hist_ignore_all_dups hist_reduce_blanks
 bindkey -v
 bindkey '^R'     history-incremental-search-backward
 bindkey "^K"     kill-line
@@ -129,8 +157,8 @@ bindkey "\e[F"   end-of-line
 bindkey '^i'     expand-or-complete-prefix
 
 HISTFILE=~/.histfile
-HISTSIZE=1000000
-SAVEHIST=1000000
+HISTSIZE=100000
+SAVEHIST=100000
 
 # Prompt shit
 # %f resets fg color
@@ -147,12 +175,14 @@ local p_user="%{$c_user%}%n%f"
 local p_host="%{$c_at%}@%{$c_host%}%m%f"
 local p_pwd="%{$c_pwd%}%~%f"
 local p_prompt="%{$c_prompt%}%#%f"
-PROMPT='${p_return}${p_docker}${p_time} ${p_user}${p_host} ${p_pwd} $vcs_info_msg_0_
+PROMPT='${p_return}${p_docker}${p_time} ${p_user}${p_host} '
+PROMPT+='${p_pwd} $vcs_info_msg_0_
 ${p_prompt} '
 
 SCRIPT_DIR=${${(%):-%x}:A:h}
 for entry in ${SCRIPT_DIR}/zshrc.d/* \
-             ${HOME}/.zsh.local; do
+             ${HOME}/.zsh.local \
+             ${HOME}/.zshrc.local; do
   test -r ${entry} && source ${entry} || :
 done
 
@@ -170,4 +200,4 @@ if [[ -x ${HOME}/.hishtory/hishtory ]]; then
 fi
 
 # Remove duplicate PATH entries while keeping order:
-typeset -U path
+typeset -U path cdpath fpath manpath

@@ -1,3 +1,6 @@
+set nocompatible                              " Disable Vi-compatibility mode.
+set mouse=                                    " Disable mouse in terminals.
+
 " vim-plug
 " :PlugInstall to install the plugins
 " :PlugUpdate to update them
@@ -14,7 +17,12 @@ Plug 'tpope/vim-fugitive'      " Git integration.
 Plug 'vim-airline/vim-airline' " Airline statusbar.
 call plug#end()
 
-set rtp+=~/.vim_plugins/powerline/powerline/bindings/vim
+" Automatically install missing plugins on startup
+autocmd VimEnter *
+  \  if len(filter(values(g:plugs), '!isdirectory(v:val.dir)'))
+  \|   PlugInstall --sync | source $MYVIMRC
+  \| endif
+
 
 " Custom Functions
 if !exists('MyFuncLoad')
@@ -60,7 +68,7 @@ set modeline                                  " Allows specifing settings in a f
 set noautowrite                               " Disables automatic writing on :next.
 set nocursorline                              " Disables the cursor line.
 set noerrorbells visualbell t_vb=             " Disable all bells
-set nohidden                                  " Closes the buffer when closing a tab.
+set hidden                                    " Allow hidden background buffers without saving.
 set nospell                                   " Disables spelling checking by default.
 set nowrap                                    " Disables line wrapping.
 set number                                    " Displays line numbers.
@@ -86,14 +94,17 @@ set ttyfast                                   " Optimizes Vim for fast terminals
 set undolevels=5000                           " Sets a large number of undo levels (default is 1000).
 set updatecount=50                            " Switches to the backup file every 50 characters (default is 200).
 set whichwrap+=b,s,<,>,h,l,[,]                " Enables wrapping at the beginning or end of lines, brackets, and other characters (default: b,s).
-set wildignore=*.o,*.obj*.bak,*.so,*.exe      " Specifies file patterns to be ignored during command-line completion.
+set wildignore=*.o,*.obj,*.bak,*.so,*.exe     " Specifies file patterns to be ignored during command-line completion.
 set wildmenu                                  " Enables visual command-line completion menu.
 set wildmode=longest:full,full                " Defines the behavior of command-line completion modes.
 set winheight=2                               " Sets more room for windows if possible.
 set winminheight=0                            " Allows smashing windows down to the status line.
 
 " Create .state directory, readable by the group.
-silent execute '!(umask 027; mkdir -p ~/.vim/state)'
+let s:state_dir = expand('~/.vim/state')
+if !isdirectory(s:state_dir)
+  call mkdir(s:state_dir, 'p', 0750)
+endif
 
 " Buffers
 if has('persistent_undo')
@@ -151,9 +162,22 @@ scriptencoding utf-8                   " Set character encodings for vimscripts.
 set encoding=utf-8                     " Sets the default encoding for text in buffers to UTF-8.
 set fileencodings=ucs-bom,utf-8,latin1 " Defines the order of encoding detection when reading a file.
 
+" Helper functions for non-disruptive formatting
+function! s:ReindentFile() abort
+  let l:view = winsaveview()
+  normal! gg=G
+  call winrestview(l:view)
+endfunction
+
+function! s:StripTrailingWhitespace() abort
+  let l:view = winsaveview()
+  keeppatterns %s/\s\+$//e
+  call winrestview(l:view)
+endfunction
+
 " Maps
-map <silent> <LocalLeader>ri G=gg<CR>                " Reindent file
-map <silent> <LocalLeader>Cs :%s/\s\+$//e<CR>        " Clear spaces at end of line
+nnoremap <silent> <LocalLeader>ri :call <SID>ReindentFile()<CR>
+nnoremap <silent> <LocalLeader>Cs :call <SID>StripTrailingWhitespace()<CR>
 nnoremap <LocalLeader>pm :call TogglePasteMode()<CR> " Toggle paste mode.
 noremap <LocalLeader>ww :set wrap!<CR>               " Toggle line wrapping.
 map <LocalLeader>tc :tabnew %<CR>                    " New tab
@@ -163,6 +187,15 @@ map <LocalLeader>tp :tabprev<CR>                     " Previous tab
 noremap F zf%                                        " Fold with paren begin/end matching
 map <LocalLeader>hl :set hlsearch! hlsearch?<CR>     " Toggle highlighted search
 
+" Navigation & editing improvements
+nnoremap n nzzzv
+nnoremap N Nzzzv
+nnoremap Y y$
+nnoremap [b :bprevious<CR>
+nnoremap ]b :bnext<CR>
+vnoremap J :m '>+1<CR>gv=gv
+vnoremap K :m '<-2<CR>gv=gv
+
 " Commands
 if !exists(':WQ')
   silent! command WQ wq
@@ -171,11 +204,14 @@ if !exists(':Wq')
   silent! command Wq wq
 endif
 if !exists(':Q')
-  silent! command Q q!
+  silent! command Q q
 endif
 if has('autocmd')
   if !exists('autocommands_loaded')
     let autocommands_loaded = 1
+
+    " Reload files changed outside Vim when pane or buffer gains focus.
+    autocmd FocusGained,BufEnter * silent! checktime
 
     " Save backupfile as backupdir/filename-06-13-1331
     autocmd BufWritePre * let &bex = strftime('-%m-%d-%H%M')
@@ -214,9 +250,12 @@ if has('autocmd')
     autocmd FileType c set omnifunc=ccomplete#Complete
     autocmd FileType ruby,eruby set omnifunc=rubycomplete#Complete
     autocmd FileType ruby,eruby let g:rubycomplete_rails = 1  " Rails support
-    autocmd FileType go,java setlocal noexpandtab
+    autocmd FileType go setlocal noexpandtab
     autocmd FileType go set colorcolumn=100
     autocmd FileType puppet set colorcolumn=0
+
+    " Automatically close quickfix window if it is the only window left.
+    autocmd WinEnter * if winnr('$') == 1 && &buftype ==# 'quickfix' | quit | endif
 
     " Convenient command to see the difference between the current buffer and the
     " file it was loaded from, thus the changes you made.  Only define it when not defined already.
