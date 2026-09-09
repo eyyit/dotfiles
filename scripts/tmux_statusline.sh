@@ -23,13 +23,19 @@ else
   NET_MODE="full"; LOAD_MODE="full"; TIME_MODE="full"
 fi
 
-IFS='|' read -r curr_ts time_full time_short < \
-  <(date +'%s%3N|%-l:%M:%S %p|%-l:%M %p')
+# Use Bash's clock and formatter to avoid forking date.
+curr_time="${EPOCHREALTIME}"
+curr_s="${curr_time%.*}"
+curr_us="${curr_time#*.}"
+curr_ts=$(( 10#${curr_s} * 1000 + 10#${curr_us:0:3} ))
+printf -v time_full '%(%-l:%M:%S %p)T' "${curr_s}"
+printf -v time_short '%(%-l:%M %p)T' "${curr_s}"
 
 fmt_rate() {
-  local -i curr="$1" prev="$2" diff="$3"
+  local -n output="$1"
+  local -i curr="$2" prev="$3" diff="$4"
   if (( diff <= 0 || curr < prev )); then
-    printf "  0#[fg=colour249]b"
+    printf -v output '  0#[fg=colour249]b'
     return
   fi
   local -i rate=$(( (curr - prev) * 1000 / diff ))
@@ -44,7 +50,7 @@ fmt_rate() {
     rate=$(( (rate + 512) / 1024 ))
     u="K"
   fi
-  printf "%3d#[fg=colour249]%s" "${rate}" "${u}"
+  printf -v output '%3d#[fg=colour249]%s' "${rate}" "${u}"
 }
 
 PREV_BG="colour0"
@@ -89,7 +95,8 @@ network_tab () {
   if [[ "${#history[@]}" -gt 0 ]]; then
     local last_ts
     read -r last_ts _ _ <<< "${history[-1]}"
-    if [[ "${last_ts}" =~ \. ]] || (( curr_ts - last_ts > 10000 )); then
+    if [[ "${last_ts}" =~ \. ]] ||
+      (( last_ts > curr_ts || curr_ts - last_ts > 10000 )); then
       history=()
     fi
   fi
@@ -126,13 +133,13 @@ network_tab () {
 
   local -i diff_ts=$(( curr_ts - old_ts ))
   local rate_rx rate_tx
-  rate_rx=$(fmt_rate "${curr_rx}" "${old_rx}" "${diff_ts}")
-  rate_tx=$(fmt_rate "${curr_tx}" "${old_tx}" "${diff_ts}")
+  fmt_rate rate_rx "${curr_rx}" "${old_rx}" "${diff_ts}"
+  fmt_rate rate_tx "${curr_tx}" "${old_tx}" "${diff_ts}"
 
   local content
-  content=$(printf \
-    "#[fg=colour249]↓#[fg=colour255]%s #[fg=colour249]↑#[fg=colour255]%s" \
-    "${rate_rx}" "${rate_tx}")
+  printf -v content \
+    '#[fg=colour249]↓#[fg=colour255]%s #[fg=colour249]↑#[fg=colour255]%s' \
+    "${rate_rx}" "${rate_tx}"
   render_tab "colour27" "colour255" "${content}"
 }
 
