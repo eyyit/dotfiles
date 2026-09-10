@@ -77,11 +77,11 @@ zstyle ':vcs_info:*:prompt:*' check-for-changes true
 # %R - repository path
 # %S - path in the repository
 local FMT_PREFIX="%{$c_presuf%}["
-local FMT_SUFFIX="%{$c_presuf%}]"
+local FMT_SUFFIX="%{$c_presuf%}]%%b%%f"
 local FMT_BRANCH="${FMT_PREFIX}%{$c_branch%}%b%u%c%f${FMT_SUFFIX}"
 local FMT_ACTION="%{$red%}(%a)%f%k%%b"
-local FMT_UNSTAGED="%{$yellow%} ●"
-local FMT_STAGED="%{$green%} ●"
+local FMT_UNSTAGED="%{$yellow%} ●%b%f"
+local FMT_STAGED="%{$green%} ●%b%f"
 
 zstyle ':vcs_info:*:prompt:*' unstagedstr   "${FMT_UNSTAGED}"
 zstyle ':vcs_info:*:prompt:*' stagedstr     "${FMT_STAGED}"
@@ -174,7 +174,7 @@ local p_time="%{$c_time%}%*%f"
 local p_user="%{$c_user%}%n%f"
 local p_host="%{$c_at%}@%{$c_host%}%m%f"
 local p_pwd="%{$c_pwd%}%~%f"
-local p_prompt="%{$c_prompt%}%#%f"
+local p_prompt="%{$c_prompt%}%#%b%f%k"
 PROMPT='${p_return}${p_docker}${p_time} ${p_user}${p_host} '
 PROMPT+='${p_pwd} $vcs_info_msg_0_
 ${p_prompt} '

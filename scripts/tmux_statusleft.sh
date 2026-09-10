@@ -92,7 +92,8 @@ render_statusleft() {
 
   printf "#[fg=%s,bg=colour0]#[default]" "${prev_bg}"
   total_left_len=$(( total_left_len + 1 ))
-  printf "%d\n" "${total_left_len}" > "${left_file}" 2>/dev/null || true
+  printf "%d\n" "${total_left_len}" > "${left_file}.tmp" 2>/dev/null && \
+    mv -f "${left_file}.tmp" "${left_file}" 2>/dev/null || true
 }
 
 render_statusleft "$@"

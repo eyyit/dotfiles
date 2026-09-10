@@ -2,38 +2,82 @@
 DATA="${XDG_RUNTIME_DIR:-/tmp}/tmux.${UID}.data"
 test -f "${DATA}" || touch "${DATA}"
 
-WIDTH="${1:-100}"
+# =============================================================================
+# Configuration & Styling Constants
+# =============================================================================
+
+# Fallback dimensions:
+readonly DEFAULT_CLIENT_WIDTH=100      # Fallback terminal client width
+readonly DEFAULT_LEFT_LEN=20           # Fallback left statusline width
+
+# Dynamic sizing tiers (available width = client_width - left_len - 1):
+readonly TIER_FULL_DEC=45  # Network, 3 load values (with decimals), full clock
+readonly TIER_FULL=38      # Network, 3 load values (integers), full clock
+readonly TIER_FULL_COMP=34 # Network, 3 load values (integers), compact clock
+readonly TIER_SHORT_DEC=28 # Network, 1 load value (decimals), compact clock
+readonly TIER_SHORT=24     # Network, 1 load value (integer), compact clock
+readonly TIER_SHORT_MIN=20 # Network, 1 load value (integer), min clock (<)
+readonly TIER_MIN_NET=12   # Min network (<), 1 load value, min clock (<)
+
+# CPU load saturation thresholds (% of total core capacity across cores):
+readonly LOAD_CRIT_PCT=200 # >= 200% core capacity: critical flashing red alarm
+readonly LOAD_WARN_PCT=100 # >= 100% core capacity: warning orange
+
+# Tab background and foreground colors (256-color palette):
+readonly COLOR_BASE_BG="colour0"       # Statusbar base background (black)
+
+# Network tab colors:
+readonly COLOR_NET_BG="colour27"       # Network tab background (blue)
+readonly COLOR_NET_FG="colour255"      # Network tab text (white)
+readonly COLOR_NET_ARROW="colour249"   # Network transfer rate arrows (gray)
+
+# Load tab colors:
+readonly COLOR_LOAD_NORMAL="colour34"  # Normal load background (green)
+readonly COLOR_LOAD_WARN="colour208"   # Warning load background (orange)
+readonly COLOR_LOAD_CRIT_A="colour196" # Critical flash phase A (bright red)
+readonly COLOR_LOAD_CRIT_B="colour88"  # Critical flash phase B (crimson)
+readonly COLOR_LOAD_FG_NORM="colour255" # Normal/crit load text (white)
+readonly COLOR_LOAD_FG_WARN="colour0"  # Warning load text (black)
+
+# Clock / time tab colors:
+readonly COLOR_TIME_BG="colour220"     # Clock tab background (yellow)
+readonly COLOR_TIME_FG="colour0"       # Clock tab text (black)
+
+# Network sampling and rolling average history parameters:
+readonly NET_HISTORY_WINDOW=5          # Rolling average history sample count
+readonly NET_HISTORY_MAX_GAP_MS=10000  # Invalidate history if gap > 10s
+readonly NET_SAMPLE_MIN_INTERVAL_MS=700 # Min interval between samples (ms)
+
+# =============================================================================
+
+WIDTH="${1:-${DEFAULT_CLIENT_WIDTH}}"
 SESSION="${2:-0}"
 
 STATUS_DIR="${XDG_RUNTIME_DIR:-/tmp}"
 LEFT_FILE="${STATUS_DIR}/tmux.${UID}.${SESSION}.left_len"
 RIGHT_FILE="${STATUS_DIR}/tmux.${UID}.${SESSION}.right_len"
 
-declare -i left_len=20
+declare -i left_len=${DEFAULT_LEFT_LEN}
 if [[ -f "${LEFT_FILE}" ]]; then
-  read -r left_len < "${LEFT_FILE}" 2>/dev/null || left_len=20
+  read -r left_len < "${LEFT_FILE}" 2>/dev/null || left_len=${DEFAULT_LEFT_LEN}
 fi
 
 # Dynamic remaining width available for right statusline:
 declare -i avail_w=$(( WIDTH - left_len - 1 ))
 
-# Sizing tiers based on dynamically available width:
-# >= 38: Network, 3 load values, full clock
-# 34-37: Network, 3 load values, compact clock
-# 28-33: Network, 1 load value,  compact clock
-# 20-27: Network, 1 load value,  minimized clock (<)
-# 12-19: Min network (<), 1 load value, minimized clock (<)
-# < 12:  All widgets minimized (<)
-
-if (( avail_w >= 38 )); then
+if (( avail_w >= TIER_FULL_DEC )); then
+  NET_MODE="full"; LOAD_MODE="full_dec"; TIME_MODE="full"
+elif (( avail_w >= TIER_FULL )); then
   NET_MODE="full"; LOAD_MODE="full"; TIME_MODE="full"
-elif (( avail_w >= 34 )); then
+elif (( avail_w >= TIER_FULL_COMP )); then
   NET_MODE="full"; LOAD_MODE="full"; TIME_MODE="short"
-elif (( avail_w >= 28 )); then
+elif (( avail_w >= TIER_SHORT_DEC )); then
+  NET_MODE="full"; LOAD_MODE="short_dec"; TIME_MODE="short"
+elif (( avail_w >= TIER_SHORT )); then
   NET_MODE="full"; LOAD_MODE="short"; TIME_MODE="short"
-elif (( avail_w >= 20 )); then
+elif (( avail_w >= TIER_SHORT_MIN )); then
   NET_MODE="full"; LOAD_MODE="short"; TIME_MODE="min"
-elif (( avail_w >= 12 )); then
+elif (( avail_w >= TIER_MIN_NET )); then
   NET_MODE="min"; LOAD_MODE="short"; TIME_MODE="min"
 else
   NET_MODE="min"; LOAD_MODE="min"; TIME_MODE="min"
@@ -51,7 +95,7 @@ fmt_rate() {
   local -n output="$1"
   local -i curr="$2" prev="$3" diff="$4"
   if (( diff <= 0 || curr < prev )); then
-    printf -v output '  0#[fg=colour249]b'
+    printf -v output '  0#[fg=%s]b' "${COLOR_NET_ARROW}"
     return
   fi
   local -i rate=$(( (curr - prev) * 1000 / diff ))
@@ -66,10 +110,10 @@ fmt_rate() {
     rate=$(( (rate + 512) / 1024 ))
     u="K"
   fi
-  printf -v output '%3d#[fg=colour249]%s' "${rate}" "${u}"
+  printf -v output '%3d#[fg=%s]%s' "${rate}" "${COLOR_NET_ARROW}" "${u}"
 }
 
-PREV_BG="colour0"
+PREV_BG="${COLOR_BASE_BG}"
 declare -i right_len=0
 
 render_tab () {
@@ -81,7 +125,7 @@ render_tab () {
 
 network_tab () {
   if [[ "${NET_MODE}" == "min" ]]; then
-    render_tab "colour27" "colour255" "<"
+    render_tab "${COLOR_NET_BG}" "${COLOR_NET_FG}" "<"
     right_len=$(( right_len + 4 ))
     return
   fi
@@ -109,12 +153,13 @@ network_tab () {
     readarray -t history < "${DATA}" 2>/dev/null
   fi
 
-  # Invalidate history if last sample is older than 10s or has invalid float
+  # Invalidate history if older than max gap or contains invalid float
   if [[ "${#history[@]}" -gt 0 ]]; then
     local last_ts
     read -r last_ts _ _ <<< "${history[-1]}"
     if [[ "${last_ts}" =~ \. ]] ||
-      (( last_ts > curr_ts || curr_ts - last_ts > 10000 )); then
+      (( last_ts > curr_ts )) ||
+      (( curr_ts - last_ts > NET_HISTORY_MAX_GAP_MS )); then
       history=()
     fi
   fi
@@ -130,23 +175,23 @@ network_tab () {
     fi
   fi
 
-  # Record sample if history is empty or at least 0.7s passed since last sample
+  # Record sample if history is empty or min interval passed since last sample
   local -i should_record=1
   if [[ "${#history[@]}" -gt 0 ]]; then
     local -i last_ts
     read -r last_ts _ _ <<< "${history[-1]}"
-    if (( curr_ts - last_ts < 700 )); then
+    if (( curr_ts - last_ts < NET_SAMPLE_MIN_INTERVAL_MS )); then
       should_record=0
     fi
   fi
 
   if (( should_record == 1 )); then
     history+=( "${curr_ts} ${curr_rx} ${curr_tx}" )
-    local -ir window_size=5
-    if (( ${#history[@]} > window_size )); then
-      history=( "${history[@]: -${window_size}}" )
+    if (( ${#history[@]} > NET_HISTORY_WINDOW )); then
+      history=( "${history[@]: -${NET_HISTORY_WINDOW}}" )
     fi
-    printf "%s\n" "${history[@]}" > "${DATA}"
+    printf "%s\n" "${history[@]}" > "${DATA}.tmp" 2>/dev/null && \
+      mv -f "${DATA}.tmp" "${DATA}" 2>/dev/null || true
   fi
 
   local -i diff_ts=$(( curr_ts - old_ts ))
@@ -156,9 +201,10 @@ network_tab () {
 
   local content
   printf -v content \
-    '#[fg=colour249]↓#[fg=colour255]%s #[fg=colour249]↑#[fg=colour255]%s' \
-    "${rate_rx}" "${rate_tx}"
-  render_tab "colour27" "colour255" "${content}"
+    '#[fg=%s]↓#[fg=%s]%s #[fg=%s]↑#[fg=%s]%s' \
+    "${COLOR_NET_ARROW}" "${COLOR_NET_FG}" "${rate_rx}" \
+    "${COLOR_NET_ARROW}" "${COLOR_NET_FG}" "${rate_tx}"
+  render_tab "${COLOR_NET_BG}" "${COLOR_NET_FG}" "${content}"
   right_len=$(( right_len + 14 ))
 }
 
@@ -178,11 +224,15 @@ load_tab () {
   (( ${#dec_part} == 0 )) && dec_part="00"
   local -i l1_x100=$(( 10#$int_part * 100 + 10#$dec_part ))
 
-  local bg="colour34" fg="colour255"
-  if (( l1_x100 >= cores * 200 )); then
-    bg="colour160"; fg="colour255"
-  elif (( l1_x100 >= cores * 100 )); then
-    bg="colour208"; fg="colour0"
+  local bg="${COLOR_LOAD_NORMAL}" fg="${COLOR_LOAD_FG_NORM}"
+  if (( l1_x100 >= cores * LOAD_CRIT_PCT )); then
+    if (( curr_s % 2 == 0 )); then
+      bg="${COLOR_LOAD_CRIT_A}"; fg="${COLOR_LOAD_FG_NORM}"
+    else
+      bg="${COLOR_LOAD_CRIT_B}"; fg="${COLOR_LOAD_FG_NORM}"
+    fi
+  elif (( l1_x100 >= cores * LOAD_WARN_PCT )); then
+    bg="${COLOR_LOAD_WARN}"; fg="${COLOR_LOAD_FG_WARN}"
   fi
 
   if [[ "${LOAD_MODE}" == "min" ]]; then
@@ -192,8 +242,12 @@ load_tab () {
   fi
 
   local content
-  if [[ "${LOAD_MODE}" == "full" ]]; then
+  if [[ "${LOAD_MODE}" == "full_dec" ]]; then
+    content="${l1} ${l2} ${l3}"
+  elif [[ "${LOAD_MODE}" == "full" ]]; then
     printf -v content "%.0f %.0f %.0f" "${l1}" "${l2}" "${l3}"
+  elif [[ "${LOAD_MODE}" == "short_dec" ]]; then
+    content="${l1}"
   else
     printf -v content "%.0f" "${l1}"
   fi
@@ -203,13 +257,13 @@ load_tab () {
 
 time_tab () {
   if [[ "${TIME_MODE}" == "min" ]]; then
-    render_tab "colour220" "colour0" "<" ""
+    render_tab "${COLOR_TIME_BG}" "${COLOR_TIME_FG}" "<" ""
     right_len=$(( right_len + 3 ))
     return
   fi
   local content="${time_short}"
   [[ "${TIME_MODE}" == "full" ]] && content="${time_full}"
-  render_tab "colour220" "colour0" "${content}" ""
+  render_tab "${COLOR_TIME_BG}" "${COLOR_TIME_FG}" "${content}" ""
   right_len=$(( right_len + ${#content} + 2 ))
 }
 
@@ -217,4 +271,5 @@ network_tab
 load_tab
 time_tab
 printf "#[default]"
-printf "%d\n" "${right_len}" > "${RIGHT_FILE}" 2>/dev/null || true
+printf "%d\n" "${right_len}" > "${RIGHT_FILE}.tmp" 2>/dev/null && \
+  mv -f "${RIGHT_FILE}.tmp" "${RIGHT_FILE}" 2>/dev/null || true
