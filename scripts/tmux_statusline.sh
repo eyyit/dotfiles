@@ -11,12 +11,12 @@ readonly DEFAULT_CLIENT_WIDTH=100      # Fallback terminal client width
 readonly DEFAULT_LEFT_LEN=20           # Fallback left statusline width
 
 # Dynamic sizing tiers (available width = client_width - left_len - 1):
-readonly TIER_FULL_DEC=45  # Network, 3 load values (with decimals), full clock
-readonly TIER_FULL=38      # Network, 3 load values (integers), full clock
-readonly TIER_FULL_COMP=34 # Network, 3 load values (integers), compact clock
-readonly TIER_SHORT_DEC=28 # Network, 1 load value (decimals), compact clock
-readonly TIER_SHORT=24     # Network, 1 load value (integer), compact clock
-readonly TIER_SHORT_MIN=20 # Network, 1 load value (integer), min clock (<)
+readonly TIER_FULL_DEC=45  # Full net (KB/MB), 3 load values (dec), full clock
+readonly TIER_FULL=38      # Full net (KB/MB), 3 load values (int), full clock
+readonly TIER_FULL_COMP=34 # Full net (KB/MB), 3 load values (int), short clock
+readonly TIER_SHORT_DEC=28 # Short net (K/M), 1 load value (dec), short clock
+readonly TIER_SHORT=24     # Short net (K/M), 1 load value (int), short clock
+readonly TIER_SHORT_MIN=20 # Short net (K/M), 1 load value (int), min clock (<)
 readonly TIER_MIN_NET=12   # Min network (<), 1 load value, min clock (<)
 
 # CPU load saturation thresholds (% of total core capacity across cores):
@@ -28,8 +28,9 @@ readonly COLOR_BASE_BG="colour0"       # Statusbar base background (black)
 
 # Network tab colors:
 readonly COLOR_NET_BG="colour27"       # Network tab background (blue)
-readonly COLOR_NET_FG="colour255"      # Network tab text (white)
-readonly COLOR_NET_ARROW="colour249"   # Network transfer rate arrows (gray)
+readonly COLOR_NET_FG="colour255"      # Network tab text & arrow (white)
+readonly COLOR_NET_ARROW="colour255"   # Rate arrows match tab text (white)
+readonly COLOR_NET_UNIT="colour249"    # Network units (gray)
 
 # Load tab colors:
 readonly COLOR_LOAD_NORMAL="colour34"  # Normal load background (green)
@@ -72,11 +73,11 @@ elif (( avail_w >= TIER_FULL )); then
 elif (( avail_w >= TIER_FULL_COMP )); then
   NET_MODE="full"; LOAD_MODE="full"; TIME_MODE="short"
 elif (( avail_w >= TIER_SHORT_DEC )); then
-  NET_MODE="full"; LOAD_MODE="short_dec"; TIME_MODE="short"
+  NET_MODE="short"; LOAD_MODE="short_dec"; TIME_MODE="short"
 elif (( avail_w >= TIER_SHORT )); then
-  NET_MODE="full"; LOAD_MODE="short"; TIME_MODE="short"
+  NET_MODE="short"; LOAD_MODE="short"; TIME_MODE="short"
 elif (( avail_w >= TIER_SHORT_MIN )); then
-  NET_MODE="full"; LOAD_MODE="short"; TIME_MODE="min"
+  NET_MODE="short"; LOAD_MODE="short"; TIME_MODE="min"
 elif (( avail_w >= TIER_MIN_NET )); then
   NET_MODE="min"; LOAD_MODE="short"; TIME_MODE="min"
 else
@@ -94,23 +95,41 @@ printf -v time_short '%(%-l:%M %p)T' "${curr_s}"
 fmt_rate() {
   local -n output="$1"
   local -i curr="$2" prev="$3" diff="$4"
-  if (( diff <= 0 || curr < prev )); then
-    printf -v output '  0#[fg=%s]b' "${COLOR_NET_ARROW}"
-    return
+  local mode="${5:-${NET_MODE}}"
+
+  local -i rate=0
+  if (( diff > 0 && curr >= prev )); then
+    rate=$(( (curr - prev) * 1000 / diff ))
   fi
-  local -i rate=$(( (curr - prev) * 1000 / diff ))
-  local u="b"
-  if (( rate >= 1048051712 )); then
-    rate=$(( (rate + 536870912) / 1073741824 ))
-    u="G"
-  elif (( rate >= 1023488 )); then
-    rate=$(( (rate + 524288) / 1048576 ))
-    u="M"
-  elif (( rate >= 1000 )); then
-    rate=$(( (rate + 512) / 1024 ))
-    u="K"
+
+  local u="B"
+  if [[ "${mode}" == "full" ]]; then
+    if (( rate >= 1048051712 )); then
+      rate=$(( (rate + 536870912) / 1073741824 ))
+      u="GB"
+    elif (( rate >= 1023488 )); then
+      rate=$(( (rate + 524288) / 1048576 ))
+      u="MB"
+    elif (( rate >= 1000 )); then
+      rate=$(( (rate + 512) / 1024 ))
+      u="KB"
+    fi
+    printf -v output '%3d #[fg=%s]%s' "${rate}" "${COLOR_NET_UNIT}" "${u}"
+  else
+    if (( rate >= 1048051712 )); then
+      rate=$(( (rate + 536870912) / 1073741824 ))
+      u="G"
+    elif (( rate >= 1023488 )); then
+      rate=$(( (rate + 524288) / 1048576 ))
+      u="M"
+    elif (( rate >= 1000 )); then
+      rate=$(( (rate + 512) / 1024 ))
+      u="K"
+    else
+      u="b"
+    fi
+    printf -v output '%3d#[fg=%s]%s' "${rate}" "${COLOR_NET_UNIT}" "${u}"
   fi
-  printf -v output '%3d#[fg=%s]%s' "${rate}" "${COLOR_NET_ARROW}" "${u}"
 }
 
 PREV_BG="${COLOR_BASE_BG}"
@@ -196,8 +215,8 @@ network_tab () {
 
   local -i diff_ts=$(( curr_ts - old_ts ))
   local rate_rx rate_tx
-  fmt_rate rate_rx "${curr_rx}" "${old_rx}" "${diff_ts}"
-  fmt_rate rate_tx "${curr_tx}" "${old_tx}" "${diff_ts}"
+  fmt_rate rate_rx "${curr_rx}" "${old_rx}" "${diff_ts}" "${NET_MODE}"
+  fmt_rate rate_tx "${curr_tx}" "${old_tx}" "${diff_ts}" "${NET_MODE}"
 
   local content
   printf -v content \
@@ -205,7 +224,11 @@ network_tab () {
     "${COLOR_NET_ARROW}" "${COLOR_NET_FG}" "${rate_rx}" \
     "${COLOR_NET_ARROW}" "${COLOR_NET_FG}" "${rate_tx}"
   render_tab "${COLOR_NET_BG}" "${COLOR_NET_FG}" "${content}"
-  right_len=$(( right_len + 14 ))
+  if [[ "${NET_MODE}" == "full" ]]; then
+    right_len=$(( right_len + 19 ))
+  else
+    right_len=$(( right_len + 15 ))
+  fi
 }
 
 load_tab () {
