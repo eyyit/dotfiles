@@ -137,6 +137,8 @@ highlight ColorColumn ctermfg=none ctermbg=235
 
 " Search color highlights
 highlight Search cterm=none ctermfg=white ctermbg=27
+highlight CurSearch cterm=bold ctermfg=black ctermbg=220
+highlight! link IncSearch CurSearch
 
 " Airline
 let g:airline#extensions#tabline#enabled = 1

@@ -17,7 +17,7 @@ git -C "${DOTFILES_DIR}" submodule update --init --recursive --remote --merge
 
 echo "==> Updating vim plugins..."
 vim -es -u "${HOME}/.vimrc" -i NONE \
-  -c "PlugUpdate --sync" -c "silent! PlugClean!" -c "qa"
+  -c "PlugUpdate" -c "silent! PlugClean!" -c "qa"
 
 if [[ -n "${TMUX:-}" ]]; then
   echo "==> Reloading tmux configuration..."
